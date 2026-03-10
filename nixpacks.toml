@@ -1,0 +1,17 @@
+# Railway / Nixpacks build configuration
+# This file tells Railway how to build and run the app
+
+[variables]
+# Give the Node.js build process more memory to prevent worker crashes
+# The default is often too low for Next.js + heavy dependencies
+NODE_OPTIONS = "--max-old-space-size=2048"
+# Use Node.js 20
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+# Run db:push first to sync schema, then start the app
+# prisma db push is idempotent - safe to run on every restart
+cmd = "npx prisma db push --accept-data-loss && npm start"
