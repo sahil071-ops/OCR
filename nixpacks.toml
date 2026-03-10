@@ -9,7 +9,7 @@ NODE_OPTIONS = "--max-old-space-size=2048"
 NIXPACKS_NODE_VERSION = "20"
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["NODE_OPTIONS='--max-old-space-size=4096' npm run build"]
 
 [start]
 # Run db:push first to sync schema, then start the app
