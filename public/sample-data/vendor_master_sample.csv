@@ -1,0 +1,9 @@
+vendorCode,vendorName,gstin,panNumber,defaultGlAccount,defaultTaxCode,defaultTdsCode,defaultDistRule,placeOfSupply,aliases,active
+V001,DHL Express India Pvt Ltd,27AABCD3611Q1ZI,AABCD3611Q,62001,GST18,TDS194C,LOGISTICS,Maharashtra,"DHL Express,DHL India",true
+V002,Andhra Bharath Carriers,,AABAC1234K,62002,GST5,TDS194C,TRANSPORT,Telangana,"Andhra Bharath,AB Carriers",true
+V003,BLR Logistiks I Ltd,27AAACB3002G2ZC,AAACB3002G,62003,GST18,TDS194C,LOGISTICS,Maharashtra,"BLR Logistiks,BLR Logistics",true
+V004,ACPL Cargo Solutions,,AAFCA7488L,62004,GST5,TDS194C,TRANSPORT,Maharashtra,"ACPL,ACPL Cargo",true
+V005,Axis Electrical Components India Pvt Ltd,27AAACA9691C1ZN,AAACA9691C,40001,GST18,TDS194A,PURCHASE,Maharashtra,"Axis Electrical,AXIZ",true
+V006,Semo Creation,,AWIPB0878P1Z0,61001,GST18,,MISC,Maharashtra,"Semo",true
+V007,Blue Dart Express Ltd,27AAACB0754H1ZS,AAACB0754H,62001,GST18,TDS194C,LOGISTICS,Maharashtra,"Blue Dart,Bluedart",true
+V008,DTDC Courier & Cargo Ltd,,AAACI1234K,62001,GST18,TDS194C,LOGISTICS,Karnataka,"DTDC,DTDC Express",true

@@ -1,0 +1,198 @@
+// Prisma Schema for Invoice Scanner PWA
+// This defines the database structure for all data the app stores
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// VENDOR MASTER
+// Stores vendor details and default accounting mappings
+// ─────────────────────────────────────────────
+model Vendor {
+  id                 String   @id @default(uuid())
+  vendorCode         String   @unique
+  vendorName         String
+  gstin              String?  @unique
+  panNumber          String?
+  defaultGlAccount   String?
+  defaultTaxCode     String?
+  defaultTdsCode     String?
+  defaultDistRule    String?
+  defaultItemType    String?
+  defaultRemarks     String?
+  placeOfSupply      String?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  aliases            VendorAlias[]
+  documents          ExtractedDocument[]
+  auditLogs          MasterAuditLog[]
+
+  @@index([gstin])
+  @@index([vendorName])
+}
+
+// ─────────────────────────────────────────────
+// VENDOR ALIAS MASTER
+// Alternate names vendors appear under on invoices
+// ─────────────────────────────────────────────
+model VendorAlias {
+  id        String   @id @default(uuid())
+  vendorId  String
+  alias     String
+  createdAt DateTime @default(now())
+
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([alias])
+  @@unique([vendorId, alias])
+}
+
+// ─────────────────────────────────────────────
+// SCAN SESSION
+// Groups uploaded documents into one work unit
+// ─────────────────────────────────────────────
+model ScanSession {
+  id          String        @id @default(uuid())
+  name        String
+  status      SessionStatus @default(ACTIVE)
+  exportedAt  DateTime?
+  expiresAt   DateTime      // TTL - auto-expire after configured hours
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  documents   ExtractedDocument[]
+
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────
+// EXTRACTED DOCUMENT
+// One row per uploaded file with all extracted + matched fields
+// ─────────────────────────────────────────────
+model ExtractedDocument {
+  id              String         @id @default(uuid())
+  sessionId       String
+  vendorId        String?        // matched vendor
+  fileName        String
+  fileType        String         // pdf, image, etc.
+  filePath        String         // temp storage path
+  fileSize        Int
+  pageCount       Int            @default(1)
+  rawText         String?        @db.Text // full extracted text
+  documentType    DocumentType   @default(UNKNOWN)
+  status          DocStatus      @default(PENDING)
+  processingError String?
+
+  // ── Extracted Fields ──
+  vendorName      String?
+  vendorGstin     String?
+  invoiceNumber   String?
+  invoiceDate     String?        // kept as string for flexibility, normalized separately
+  dueDate         String?
+  postingDate     String?
+  placeOfSupply   String?
+  taxableAmount   Float?
+  cgst            Float?
+  sgst            Float?
+  igst            Float?
+  totalAmount     Float?
+  currency        String?        @default("INR")
+  lineItems       Json?          // array of {description, qty, unitPrice, amount}
+  remarks         String?
+
+  // ── Matched / Filled Fields (from master) ──
+  vendorCode      String?
+  glAccount       String?
+  taxCode         String?
+  tdsCode         String?
+  distributionRule String?
+  projectCode     String?
+  warehouse       String?
+  grpoReference   String?
+  itemCode        String?
+  rcmApplicable   Boolean?
+  downPayment     Float?
+  rounding        Float?
+
+  // ── Confidence Scores ──
+  confidenceData  Json?          // {fieldName: {score, source, method}}
+  overallConfidence Float?
+
+  // ── Review ──
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  isDuplicate     Boolean        @default(false)
+  duplicateOfId   String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  session         ScanSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  vendor          Vendor?        @relation(fields: [vendorId], references: [id])
+
+  @@index([sessionId])
+  @@index([vendorGstin])
+  @@index([invoiceNumber])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// MASTER AUDIT LOG
+// Tracks changes to vendor master data
+// ─────────────────────────────────────────────
+model MasterAuditLog {
+  id         String   @id @default(uuid())
+  vendorId   String?
+  action     String   // CREATE, UPDATE, DELETE, IMPORT
+  changeData Json?    // {before, after}
+  source     String?  // csv-upload, manual-edit, api
+  performedBy String? // user identifier (future)
+  createdAt  DateTime @default(now())
+
+  vendor     Vendor?  @relation(fields: [vendorId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// APP SETTINGS
+// Key-value store for configurable app settings
+// ─────────────────────────────────────────────
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+enum SessionStatus {
+  ACTIVE
+  EXPORTED
+  DELETED
+}
+
+enum DocStatus {
+  PENDING      // uploaded, not yet processed
+  PROCESSING   // extraction in progress
+  EXTRACTED    // extraction done, needs review
+  REVIEWED     // user reviewed
+  ERROR        // extraction failed
+}
+
+enum DocumentType {
+  TAX_INVOICE
+  SERVICE_INVOICE
+  FREIGHT
+  CREDIT_NOTE
+  DEBIT_NOTE
+  BILL
+  UNKNOWN
+}
