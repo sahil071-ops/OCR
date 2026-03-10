@@ -1,16 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Skip type checking and linting during build (speeds up build, avoids worker crashes)
+  // Skip type checking during build (speeds up build, avoids worker crashes)
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
 
   // Enable serverExternalPackages for packages that use native node modules
-  serverExternalPackages: ['tesseract.js', 'sharp', 'pdf-parse'],
+  // canvas is included because pdf-parse pulls it in as an optional dep
+  serverExternalPackages: ['tesseract.js', 'sharp', 'pdf-parse', 'canvas'],
 
   // Image configuration
   images: {
@@ -36,15 +34,6 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
-  },
-
-  // Webpack configuration for pdf-parse compatibility
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // pdf-parse uses canvas - exclude it from client bundle
-      config.externals = [...(config.externals || []), 'canvas'];
-    }
-    return config;
   },
 };
 
