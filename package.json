@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "node scripts/build-version.js && next build",
     "build:no-version": "next build",
-    "start": "prisma db push && next start",
+    "start": "prisma db push --url $DATABASE_URL && next start",
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
