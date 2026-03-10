@@ -15,7 +15,11 @@ function createPrismaClient() {
     throw new Error('DATABASE_PUBLIC_URL or DATABASE_URL environment variable is not set');
   }
 
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({
+    connectionString,
+    // Railway's TCP proxy requires SSL; disable cert verification for self-signed certs
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  });
   const adapter = new PrismaPg(pool);
 
   return new PrismaClient({

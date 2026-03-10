@@ -34,8 +34,9 @@ console.log(`[build-version] Version: ${version}`);
 console.log(`[build-version] Timestamp: ${buildTimestamp}`);
 console.log(`[build-version] CI/Railway mode: ${isCI ? 'YES' : 'NO'}`);
 
-// LOCAL ONLY: write version into .env.local
-if (!isCI) {
+// Always write version into .env.local so next build picks up NEXT_PUBLIC_* vars
+// Works in both local dev and Railway CI (Railway build has writable filesystem)
+{
   const envPath = path.join(__dirname, '..', '.env.local');
   let envContent = '';
 
@@ -49,8 +50,6 @@ if (!isCI) {
       )
       .join('\n')
       .trim();
-  } else {
-    console.log('[build-version] No .env.local found - please copy .env.example to .env.local');
   }
 
   const versionLines = `\n# Auto-generated - do not edit manually\nNEXT_PUBLIC_APP_VERSION="${version}"\nNEXT_PUBLIC_BUILD_TIMESTAMP="${buildTimestamp}"\n`;
@@ -78,7 +77,7 @@ if (fs.existsSync(swPath)) {
   }
 }
 
-// LOCAL ONLY: append to CHANGELOG.md
+// LOCAL ONLY: append to CHANGELOG.md (skip in CI to avoid dirty git state)
 if (!isCI) {
   const changelogPath = path.join(__dirname, '..', 'CHANGELOG.md');
   const entry = `\n## ${version} (${now.toLocaleDateString('en-IN')} ${now.toLocaleTimeString('en-IN')})\n- Build deployed\n`;

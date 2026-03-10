@@ -7,9 +7,6 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '@/lib/db';
-import { extractFromFile } from '@/lib/extraction';
-import { extractFieldsWithClaude } from '@/lib/extraction/claudeExtractor';
-import { matchVendor, buildConfidenceData, calculateOverallConfidence } from '@/lib/matching';
 
 // Max file size: 20MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -80,7 +77,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, buffer);
 
-    // Create document record as PROCESSING
+    // Create document record as PENDING — extraction starts when user taps "Process All"
     const doc = await prisma.extractedDocument.create({
       data: {
         sessionId,
@@ -88,14 +85,8 @@ export async function POST(request: NextRequest) {
         fileType: file.type,
         filePath: relativePath,
         fileSize: file.size,
-        status: 'PROCESSING',
+        status: 'PENDING',
       },
-    });
-
-    // Run extraction pipeline asynchronously
-    // We update the DB record when done
-    runExtractionPipeline(doc.id, filePath, file.type, file.name).catch(err => {
-      console.error('[Upload] Background extraction failed:', err);
     });
 
     return NextResponse.json({
@@ -103,8 +94,8 @@ export async function POST(request: NextRequest) {
       data: {
         documentId: doc.id,
         fileName: file.name,
-        status: 'processing',
-        message: 'Upload successful, extraction in progress',
+        status: 'pending',
+        message: 'Upload successful, ready to process',
       },
     }, { status: 201 });
 
@@ -117,127 +108,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Runs the full extraction → matching → update pipeline for a document
- * This runs in the background after the upload response is sent
- */
-async function runExtractionPipeline(
-  documentId: string,
-  filePath: string,
-  mimeType: string,
-  originalName: string
-) {
-  try {
-    console.log(`[Extraction] Starting for document ${documentId}`);
-
-    // Step 1: Extract raw text + basic field parsing
-    const extractionResult = await extractFromFile(filePath, mimeType, originalName);
-
-    // Step 2: Use Claude for better structured extraction if API key available
-    let fields = extractionResult.fields;
-    if (process.env.ANTHROPIC_API_KEY && extractionResult.rawText.length > 50) {
-      const claudeResult = await extractFieldsWithClaude(extractionResult.rawText);
-      if (!claudeResult.error) {
-        // Merge Claude results (prefer Claude's output, fall back to regex)
-        fields = {
-          ...fields,
-          ...Object.fromEntries(
-            Object.entries(claudeResult.fields).filter(([, v]) => v != null && v !== undefined)
-          ),
-        };
-      }
-    }
-
-    // Step 3: Match vendor from master data
-    const matchResult = await matchVendor(fields.vendorName, fields.vendorGstin);
-
-    // Step 4: Build confidence scores
-    const confidenceData = buildConfidenceData(fields as Record<string, unknown>, matchResult);
-    const overallConfidence = calculateOverallConfidence(confidenceData);
-
-    // Step 5: Apply vendor defaults
-    const vendorDefaults = matchResult.vendor
-      ? {
-          vendorId: matchResult.vendor.id,
-          vendorCode: matchResult.vendor.vendorCode,
-          glAccount: matchResult.vendor.defaultGlAccount,
-          taxCode: matchResult.vendor.defaultTaxCode,
-          tdsCode: matchResult.vendor.defaultTdsCode,
-          distributionRule: matchResult.vendor.defaultDistRule,
-        }
-      : {};
-
-    // Step 6: Detect duplicates within the session
-    const doc = await prisma.extractedDocument.findUnique({
-      where: { id: documentId },
-      select: { sessionId: true },
-    });
-
-    let isDuplicate = false;
-    let duplicateOfId: string | null = null;
-
-    if (doc && fields.invoiceNumber && fields.vendorGstin) {
-      const existing = await prisma.extractedDocument.findFirst({
-        where: {
-          sessionId: doc.sessionId,
-          invoiceNumber: fields.invoiceNumber,
-          vendorGstin: fields.vendorGstin,
-          id: { not: documentId },
-        },
-      });
-      if (existing) {
-        isDuplicate = true;
-        duplicateOfId = existing.id;
-      }
-    }
-
-    // Step 7: Update document record
-    await prisma.extractedDocument.update({
-      where: { id: documentId },
-      data: {
-        status: 'EXTRACTED',
-        rawText: extractionResult.rawText,
-        pageCount: extractionResult.pageCount,
-        documentType: (fields.documentType || 'UNKNOWN') as 'TAX_INVOICE' | 'SERVICE_INVOICE' | 'FREIGHT' | 'CREDIT_NOTE' | 'DEBIT_NOTE' | 'BILL' | 'UNKNOWN',
-
-        // Extracted fields
-        vendorName: fields.vendorName,
-        vendorGstin: fields.vendorGstin,
-        invoiceNumber: fields.invoiceNumber,
-        invoiceDate: fields.invoiceDate,
-        dueDate: fields.dueDate,
-        placeOfSupply: fields.placeOfSupply,
-        taxableAmount: fields.taxableAmount,
-        cgst: fields.cgst,
-        sgst: fields.sgst,
-        igst: fields.igst,
-        totalAmount: fields.totalAmount,
-        currency: fields.currency || 'INR',
-        lineItems: (fields.lineItems as object[]) || [],
-        remarks: fields.remarks,
-
-        // Master-matched fields
-        ...vendorDefaults,
-
-        // Confidence
-        confidenceData: confidenceData as object,
-        overallConfidence,
-
-        // Duplicate detection
-        isDuplicate,
-        duplicateOfId,
-      },
-    });
-
-    console.log(`[Extraction] Completed for document ${documentId}, confidence: ${overallConfidence}`);
-  } catch (error) {
-    console.error(`[Extraction] Failed for document ${documentId}:`, error);
-    await prisma.extractedDocument.update({
-      where: { id: documentId },
-      data: {
-        status: 'ERROR',
-        processingError: error instanceof Error ? error.message : 'Unknown extraction error',
-      },
-    }).catch(e => console.error('[Extraction] Failed to update error status:', e));
-  }
-}

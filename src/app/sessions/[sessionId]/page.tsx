@@ -15,6 +15,7 @@ import {
   RefreshCwIcon,
   UploadIcon,
   ClipboardListIcon,
+  PlayIcon,
 } from 'lucide-react';
 
 interface SessionPageProps {
@@ -29,6 +30,7 @@ export default function SessionPage({ params }: SessionPageProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('upload');
   const [pollingActive, setPollingActive] = useState(false);
   const { toast } = useToast();
@@ -67,10 +69,28 @@ export default function SessionPage({ params }: SessionPageProps) {
 
   const handleUploadComplete = useCallback((documentId: string, fileName: string) => {
     toast(`${fileName} uploaded`, 'success');
-    setPollingActive(true);
-    setActiveTab('review');
     fetchSession();
   }, [toast, fetchSession]);
+
+  const handleProcessAll = useCallback(async () => {
+    setProcessing(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/process`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        toast(`Processing ${data.data.started} document${data.data.started !== 1 ? 's' : ''}...`, 'success');
+        setPollingActive(true);
+        setActiveTab('review');
+        fetchSession();
+      } else {
+        toast(data.error || 'Failed to start processing', 'error');
+      }
+    } catch {
+      toast('Failed to start processing', 'error');
+    } finally {
+      setProcessing(false);
+    }
+  }, [sessionId, toast, fetchSession]);
 
   const handleUploadError = useCallback((fileName: string, error: string) => {
     toast(`${fileName}: ${error}`, 'error');
@@ -139,8 +159,9 @@ export default function SessionPage({ params }: SessionPageProps) {
     );
   }
 
-  const processingCount = documents.filter(d => d.status === 'PROCESSING' || d.status === 'PENDING').length;
-  const readyCount = documents.filter(d => d.status !== 'PENDING' && d.status !== 'PROCESSING').length;
+  const pendingCount = documents.filter(d => d.status === 'PENDING').length;
+  const processingCount = documents.filter(d => d.status === 'PROCESSING').length;
+  const readyCount = documents.filter(d => d.status === 'EXTRACTED' || d.status === 'REVIEWED' || d.status === 'ERROR').length;
 
   return (
     <div className="pb-24 md:pb-6">
@@ -157,8 +178,11 @@ export default function SessionPage({ params }: SessionPageProps) {
             <Badge variant={session.status === 'EXPORTED' ? 'success' : 'info'}>
               {session.status}
             </Badge>
+            {pendingCount > 0 && processingCount === 0 && (
+              <Badge variant="warning">{pendingCount} queued</Badge>
+            )}
             {processingCount > 0 && (
-              <Badge variant="warning">{processingCount} processing...</Badge>
+              <Badge variant="warning">{processingCount} extracting...</Badge>
             )}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -182,10 +206,11 @@ export default function SessionPage({ params }: SessionPageProps) {
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         {[
           { label: 'Total', value: documents.length, color: 'text-gray-900' },
-          { label: 'Processing', value: processingCount, color: 'text-blue-600' },
+          { label: 'Queued', value: pendingCount, color: 'text-amber-600' },
+          { label: 'Extracting', value: processingCount, color: 'text-blue-600' },
           { label: 'Ready', value: readyCount, color: 'text-green-600' },
         ].map(stat => (
           <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
@@ -231,13 +256,25 @@ export default function SessionPage({ params }: SessionPageProps) {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="text-base font-semibold text-gray-800 mb-1">Upload Documents</h2>
           <p className="text-sm text-gray-500 mb-4">
-            Upload PDFs or take photos. Documents will be processed automatically.
+            Take all your photos or upload PDFs first, then tap <strong>Process All</strong> to extract data from everything at once.
           </p>
           <FileUploadZone
             sessionId={sessionId}
             onUploadComplete={handleUploadComplete}
             onUploadError={handleUploadError}
           />
+          {pendingCount > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <Button
+                onClick={handleProcessAll}
+                loading={processing}
+                className="w-full"
+              >
+                <PlayIcon className="h-4 w-4" />
+                Process All ({pendingCount} file{pendingCount !== 1 ? 's' : ''})
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div>
