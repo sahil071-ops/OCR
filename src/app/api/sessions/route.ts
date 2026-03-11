@@ -54,8 +54,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: session }, { status: 201 });
   } catch (error) {
     console.error('[Sessions POST]', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create session' },
+      { success: false, error: msg },
       { status: 500 }
     );
   }

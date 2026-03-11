@@ -1,6 +1,26 @@
 import type { NextConfig } from "next";
+import fs from "fs";
+import path from "path";
+
+// Read version baked in by scripts/build-version.js at build time.
+// Using next.config env overrides Railway dashboard variables at webpack compile time.
+let buildVersion = "v0.1.0-dev";
+let buildTimestamp = new Date().toISOString();
+try {
+  const meta = JSON.parse(
+    fs.readFileSync(path.join(__dirname, ".build-meta.json"), "utf-8")
+  );
+  buildVersion = meta.version;
+  buildTimestamp = meta.buildTimestamp;
+} catch {
+  // .build-meta.json not present (e.g. running next dev without build script)
+}
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: buildVersion,
+    NEXT_PUBLIC_BUILD_TIMESTAMP: buildTimestamp,
+  },
   // Skip type checking during build (speeds up build, avoids worker crashes)
   typescript: {
     ignoreBuildErrors: true,

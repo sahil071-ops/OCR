@@ -34,6 +34,16 @@ console.log(`[build-version] Version: ${version}`);
 console.log(`[build-version] Timestamp: ${buildTimestamp}`);
 console.log(`[build-version] CI/Railway mode: ${isCI ? 'YES' : 'NO'}`);
 
+// Write version to .build-meta.json so next.config.ts can inject it via
+// the env config (which overrides Railway dashboard variables at compile time)
+const metaPath = path.join(__dirname, '..', '.build-meta.json');
+try {
+  fs.writeFileSync(metaPath, JSON.stringify({ version, buildTimestamp }, null, 2));
+  console.log('[build-version] Wrote .build-meta.json');
+} catch (e) {
+  console.warn('[build-version] Could not write .build-meta.json:', e.message);
+}
+
 // Always write version into .env.local so next build picks up NEXT_PUBLIC_* vars
 // Works in both local dev and Railway CI (Railway build has writable filesystem)
 {
