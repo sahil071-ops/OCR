@@ -23,6 +23,7 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
   const [newSessionName, setNewSessionName] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -48,6 +49,7 @@ export default function HomePage() {
       return;
     }
     setCreating(true);
+    setCreateError(null);
     try {
       const res = await fetch('/api/sessions', {
         method: 'POST',
@@ -56,15 +58,14 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast('Session created!', 'success');
         setShowCreateModal(false);
         setNewSessionName('');
         window.location.href = `/sessions/${data.data.id}`;
       } else {
-        toast(data.error || 'Failed to create session', 'error');
+        setCreateError(data.error || 'Failed to create session');
       }
     } catch {
-      toast('Failed to create session', 'error');
+      setCreateError('Network error — could not reach the server');
     } finally {
       setCreating(false);
     }
@@ -115,6 +116,7 @@ export default function HomePage() {
           <Button
             onClick={() => {
               setNewSessionName(defaultName());
+              setCreateError(null);
               setShowCreateModal(true);
             }}
           >
@@ -140,7 +142,7 @@ export default function HomePage() {
           <FolderOpenIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
           <h2 className="text-lg font-medium text-gray-700">No sessions yet</h2>
           <p className="text-sm text-gray-400 mt-1 mb-6">Create a session to start scanning invoices</p>
-          <Button onClick={() => { setNewSessionName(defaultName()); setShowCreateModal(true); }}>
+          <Button onClick={() => { setNewSessionName(defaultName()); setCreateError(null); setShowCreateModal(true); }}>
             <PlusIcon className="h-4 w-4" />
             Create First Session
           </Button>
@@ -191,7 +193,7 @@ export default function HomePage() {
       )}
 
       {/* Create Session Modal */}
-      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Session" size="sm">
+      <Modal open={showCreateModal} onClose={() => { setShowCreateModal(false); setCreateError(null); }} title="Create New Session" size="sm">
         <div className="p-6">
           <p className="text-sm text-gray-500 mb-4">
             A session groups invoices you want to process together in one export.
@@ -200,13 +202,16 @@ export default function HomePage() {
           <input
             type="text"
             value={newSessionName}
-            onChange={e => setNewSessionName(e.target.value)}
+            onChange={e => { setNewSessionName(e.target.value); setCreateError(null); }}
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
             placeholder="e.g. March 2026 Invoices"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             autoFocus
             maxLength={100}
           />
+          {createError && (
+            <p className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{createError}</p>
+          )}
           <div className="flex gap-3 mt-6">
             <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">Cancel</Button>
             <Button onClick={handleCreate} loading={creating} className="flex-1">Create Session</Button>
