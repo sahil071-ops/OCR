@@ -210,7 +210,7 @@ export default function HomePage() {
             maxLength={100}
           />
           {createError && (
-            <p className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{createError}</p>
+            <pre className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 whitespace-pre-wrap break-all overflow-auto max-h-32">{createError}</pre>
           )}
           <div className="flex gap-3 mt-6">
             <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">Cancel</Button>
