@@ -55,8 +55,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Sessions POST]', error);
     const msg = error instanceof Error ? error.message : String(error);
+    // Include masked DB host so connection errors are diagnosable
+    const dbUrl = process.env.DATABASE_URL || '';
+    const dbHost = (() => { try { return new URL(dbUrl).host; } catch { return 'unknown'; } })();
     return NextResponse.json(
-      { success: false, error: msg },
+      { success: false, error: msg, dbHost },
       { status: 500 }
     );
   }

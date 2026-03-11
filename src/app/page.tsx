@@ -62,7 +62,8 @@ export default function HomePage() {
         setNewSessionName('');
         window.location.href = `/sessions/${data.data.id}`;
       } else {
-        setCreateError(data.error || 'Failed to create session');
+        const dbInfo = data.dbHost ? `\n\n[DB host: ${data.dbHost}]` : '';
+        setCreateError((data.error || 'Failed to create session') + dbInfo);
       }
     } catch {
       setCreateError('Network error — could not reach the server');
