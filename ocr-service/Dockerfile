@@ -1,15 +1,19 @@
 # Python OCR Service
-# Installs EasyOCR, OpenCV, and pdf2image (requires poppler)
+# Uses pytesseract + OpenCV for lightweight, reliable OCR.
+# Estimated image size: ~400 MB (well within Railway's 4 GB limit).
+# No PyTorch, no model downloads, no ML dependency chain.
 
 FROM python:3.11-slim
 
 # System dependencies
-# poppler-utils  → pdf2image (PDF → image conversion)
-# libgomp1       → PyTorch OpenMP support (used by EasyOCR)
-# libglib2.0-0, libsm6, libxext6, libxrender-dev, libgl1 → OpenCV headless
+# tesseract-ocr + tesseract-ocr-eng  → Tesseract 5 OCR engine + English data
+# poppler-utils                      → pdf2image (PDF → image conversion)
+# libglib2.0-0, libsm6, libxext6,
+#   libxrender-dev, libgl1            → OpenCV headless runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-eng \
     poppler-utils \
-    libgomp1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
@@ -19,14 +23,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies first (layer cache)
+# Install Python dependencies (layer cached separately from source)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download EasyOCR models at build time so first request is fast.
-# The || true makes this non-fatal if network is unavailable during build.
-RUN python -c "import easyocr; easyocr.Reader(['en'], gpu=False, verbose=False)" \
-    || echo "EasyOCR model pre-download skipped (will download on first request)"
+# Verify Tesseract is working at build time (fast, no download needed)
+RUN tesseract --version && python -c "import pytesseract; print('pytesseract OK')"
 
 # Copy source
 COPY . .

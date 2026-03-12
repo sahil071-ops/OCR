@@ -1,37 +1,30 @@
 """
-EasyOCR engine wrapper.
+Tesseract OCR engine wrapper (via pytesseract).
 Returns extracted text, per-word confidence, and aggregate confidence score.
 Designed to be swappable – any replacement just needs to implement extract_text().
 
-EasyOCR is chosen over PaddleOCR for its simple, reliable installation:
-  pip install easyocr
-No Cython, no PaddlePaddle dependency chain, no version conflicts.
-Accuracy is comparable for printed invoice text.
+Why pytesseract instead of EasyOCR/PaddleOCR:
+- System Tesseract binary = tiny Docker image (~400 MB vs 8+ GB for PyTorch)
+- No ML model downloads at build or runtime
+- Reliable installation on any Linux
+- With OpenCV preprocessing (deskew, contrast, denoise) the quality is
+  very good for clean-to-moderate invoice scans
+- Messy invoices that still fail go to Claude (the rescue lane) anyway
 """
 
 import logging
+import pytesseract
+from PIL import Image
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Lazy-initialise once – EasyOCR model loading takes ~5s on first call
-_reader = None
-
-
-def _get_reader():
-    global _reader
-    if _reader is None:
-        import easyocr
-        # 'en' covers English, digits, and common symbols found in invoices.
-        # Add 'hi' here if you need Hindi/Devanagari support.
-        _reader = easyocr.Reader(
-            ['en'],
-            gpu=False,       # CPU-only; set True if a GPU is available
-            verbose=False,
-        )
-        logger.info("EasyOCR reader initialised")
-    return _reader
+# Tesseract page segmentation modes that work well for invoices:
+#   PSM 3 = fully automatic (default, good for multi-column layouts)
+#   PSM 6 = uniform block of text (good for single-column invoices)
+# OEM 3 = use LSTM neural net (best accuracy, default in Tesseract 4+)
+TESS_CONFIG = "--oem 3 --psm 6"
 
 
 @dataclass
@@ -47,98 +40,66 @@ class OcrResult:
     confidence: float        # aggregate 0.0 – 1.0
     word_count: int
     words: List[OcrWord] = field(default_factory=list)
-    method: str = "easyocr"
+    method: str = "tesseract-py"
     error: Optional[str] = None
 
 
 def extract_text(image_path: str) -> OcrResult:
     """
-    Run EasyOCR on a single image file.
-    Returns structured OcrResult with full text and confidence.
+    Run Tesseract on a single preprocessed image file.
+    Returns structured OcrResult with full text and per-word confidence.
     """
     try:
-        reader = _get_reader()
-        # detail=1 returns (bbox, text, confidence) tuples
-        raw = reader.readtext(image_path, detail=1, paragraph=False)
+        img = Image.open(image_path)
 
-        if not raw:
-            return OcrResult(text="", confidence=0.0, word_count=0, method="easyocr")
+        # image_to_data gives us per-word bounding boxes + confidence scores
+        data = pytesseract.image_to_data(
+            img,
+            config=TESS_CONFIG,
+            output_type=pytesseract.Output.DICT,
+        )
 
         words: List[OcrWord] = []
         confidences: List[float] = []
 
-        for item in raw:
-            # EasyOCR returns: (bbox, text, confidence)
-            # bbox is [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]
-            if not item or len(item) < 3:
-                continue
-            bbox_raw, text, conf = item
-            if not text or not text.strip():
+        n = len(data["text"])
+        for i in range(n):
+            text = (data["text"][i] or "").strip()
+            conf_raw = data["conf"][i]
+
+            # Tesseract returns conf=-1 for non-word elements (layout blocks)
+            if not text or conf_raw == -1:
                 continue
 
-            conf_float = float(conf) if conf is not None else 0.0
+            conf_float = max(0.0, float(conf_raw) / 100.0)
+            x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
             words.append(OcrWord(
-                text=text.strip(),
+                text=text,
                 confidence=conf_float,
-                bbox=bbox_raw,
+                bbox=[[x, y], [x + w, y], [x + w, y + h], [x, y + h]],
             ))
             confidences.append(conf_float)
 
         if not words:
-            return OcrResult(text="", confidence=0.0, word_count=0, method="easyocr")
+            return OcrResult(text="", confidence=0.0, word_count=0, method="tesseract-py")
 
-        full_text = _reconstruct_text(words)
-        agg_confidence = _aggregate_confidence(confidences)
+        # image_to_string gives better paragraph structure than reconstructing from words
+        full_text = pytesseract.image_to_string(img, config=TESS_CONFIG).strip()
+        if not full_text:
+            full_text = " ".join(w.text for w in words)
 
         return OcrResult(
             text=full_text,
-            confidence=agg_confidence,
+            confidence=_aggregate_confidence(confidences),
             word_count=len(words),
             words=words,
-            method="easyocr",
+            method="tesseract-py",
         )
 
     except Exception as exc:
-        logger.error("EasyOCR extraction failed: %s", exc)
+        logger.error("Tesseract extraction failed: %s", exc)
         return OcrResult(text="", confidence=0.0, word_count=0,
-                         method="easyocr", error=str(exc))
-
-
-def _reconstruct_text(words: List[OcrWord]) -> str:
-    """
-    Re-assemble words into human-readable lines by grouping them
-    by their vertical (Y) position on the page.
-    Words on the same horizontal band → same line, sorted left-to-right.
-    """
-    if not words:
-        return ""
-
-    # Sort all words by top-left Y then X
-    sorted_words = sorted(words, key=lambda w: (w.bbox[0][1], w.bbox[0][0]))
-
-    lines: List[List[OcrWord]] = []
-    current_line: List[OcrWord] = [sorted_words[0]]
-    line_y = sorted_words[0].bbox[0][1]
-
-    for word in sorted_words[1:]:
-        word_y = word.bbox[0][1]
-        word_h = max(abs(word.bbox[2][1] - word.bbox[0][1]), 1)
-
-        if abs(word_y - line_y) < word_h * 0.8:
-            current_line.append(word)
-        else:
-            lines.append(current_line)
-            current_line = [word]
-            line_y = word_y
-
-    lines.append(current_line)
-
-    text_lines = []
-    for line_words in lines:
-        sorted_line = sorted(line_words, key=lambda w: w.bbox[0][0])
-        text_lines.append(" ".join(w.text for w in sorted_line))
-
-    return "\n".join(text_lines)
+                         method="tesseract-py", error=str(exc))
 
 
 def _aggregate_confidence(confidences: List[float]) -> float:

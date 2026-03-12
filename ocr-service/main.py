@@ -3,10 +3,11 @@ OCR Microservice – FastAPI
 Exposes a single POST /ocr endpoint that:
   1. Accepts an image or PDF (multipart file OR base64 JSON body)
   2. Converts PDF pages to images if needed
-  3. Runs image preprocessing (OpenCV)
-  4. Runs EasyOCR
+  3. Runs image preprocessing (OpenCV: deskew, contrast, denoise)
+  4. Runs Tesseract OCR (via pytesseract)
   5. Returns structured JSON with text + confidence
 
+Lightweight: ~400 MB Docker image, no PyTorch, no model downloads.
 Designed to be deployed as a separate Railway service.
 The Next.js app calls this service; if it is unavailable the app falls back
 to Tesseract.js, and if that also fails it escalates to Claude (rescue lane).
