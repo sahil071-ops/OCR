@@ -8,6 +8,7 @@ import { ConfidenceBadge } from '@/components/ui/ConfidenceBadge';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toaster';
 import type { Document, ConfidenceData } from '@/types';
+import { LaneBadge } from '@/components/ui/LaneBadge';
 import {
   EditIcon,
   CheckCircleIcon,
@@ -214,6 +215,7 @@ function DocumentRow({ doc, isExpanded, onToggleExpand, onEdit, onDelete, onUpda
             {doc.documentType !== 'UNKNOWN' && (
               <Badge variant="gray">{doc.documentType?.replace(/_/g, ' ')}</Badge>
             )}
+            <LaneBadge lane={doc.processingLane} />
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-xs text-gray-500">{doc.invoiceNumber || 'No invoice #'}</span>
@@ -293,6 +295,28 @@ function DocumentRow({ doc, isExpanded, onToggleExpand, onEdit, onDelete, onUpda
               </div>
             ))}
           </div>
+
+          {/* Processing info */}
+          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-3 text-xs text-gray-400">
+            {doc.ocrMethod && (
+              <span>OCR: <span className="text-gray-600">{doc.ocrMethod}</span></span>
+            )}
+            {doc.ocrConfidence != null && (
+              <span>OCR conf: <span className="text-gray-600">{(doc.ocrConfidence * 100).toFixed(0)}%</span></span>
+            )}
+            {doc.aiTokensUsed != null && (
+              <span>AI tokens: <span className="text-gray-600">{doc.aiTokensUsed.toLocaleString()}</span></span>
+            )}
+            {doc.aiEstimatedCost != null && (
+              <span>AI cost: <span className="text-gray-600">${doc.aiEstimatedCost.toFixed(4)}</span></span>
+            )}
+          </div>
+
+          {doc.fallbackReason && (
+            <div className="mt-2 p-2 bg-yellow-50 rounded-lg text-xs text-yellow-700">
+              <strong>AI rescue reason:</strong> {doc.fallbackReason}
+            </div>
+          )}
 
           {doc.status === 'ERROR' && doc.processingError && (
             <div className="mt-3 p-3 bg-red-50 rounded-lg text-xs text-red-600">

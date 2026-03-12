@@ -81,6 +81,30 @@ export type DocumentType =
 export type DocStatus = 'PENDING' | 'PROCESSING' | 'EXTRACTED' | 'REVIEWED' | 'ERROR';
 export type SessionStatus = 'ACTIVE' | 'EXPORTED' | 'DELETED';
 
+// Which processing lane was used for this document
+export type ProcessingLane =
+  | 'UNKNOWN'      // not yet processed
+  | 'PDF_NATIVE'   // native PDF text, zero OCR cost
+  | 'OCR_ONLY'     // PaddleOCR, no AI
+  | 'AI_CHEAP'     // PaddleOCR + claude-haiku rescue
+  | 'AI_STRONG';   // PaddleOCR + claude-sonnet escalation
+
+export const LANE_LABELS: Record<ProcessingLane, string> = {
+  UNKNOWN: 'Pending',
+  PDF_NATIVE: 'PDF Text',
+  OCR_ONLY: 'OCR Only',
+  AI_CHEAP: 'AI Assist',
+  AI_STRONG: 'AI Full',
+};
+
+export const LANE_COLORS: Record<ProcessingLane, string> = {
+  UNKNOWN: 'gray',
+  PDF_NATIVE: 'green',
+  OCR_ONLY: 'green',
+  AI_CHEAP: 'yellow',
+  AI_STRONG: 'red',
+};
+
 export interface Document {
   id: string;
   sessionId: string;
@@ -125,6 +149,14 @@ export interface Document {
   rcmApplicable?: boolean | null;
   downPayment?: number | null;
   rounding?: number | null;
+
+  // Processing Lane & Cost
+  processingLane?: ProcessingLane | null;
+  fallbackReason?: string | null;
+  ocrConfidence?: number | null;
+  ocrMethod?: string | null;
+  aiTokensUsed?: number | null;
+  aiEstimatedCost?: number | null;
 
   // Confidence
   confidenceData?: ConfidenceData | null;

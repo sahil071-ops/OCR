@@ -1,17 +1,16 @@
-# Railway / Nixpacks build configuration
-# This file tells Railway how to build and run the app
+# Railway / Nixpacks build configuration (Next.js app service)
+# The Python OCR service is deployed separately using ocr-service/Dockerfile.
+# See SETUP.md for Railway deployment instructions.
 
 [variables]
-# Give the Node.js build process more memory to prevent worker crashes
-# The default is often too low for Next.js + heavy dependencies
 NODE_OPTIONS = "--max-old-space-size=2048"
-# Use Node.js 20
 NIXPACKS_NODE_VERSION = "20"
 
 [phases.build]
 cmds = ["NODE_OPTIONS='--max-old-space-size=4096' npm run build"]
 
 [start]
-# Run db:push first to sync schema, then start the app
-# prisma db push is idempotent - safe to run on every restart
+# Sync schema changes then start app.
+# OCR_SERVICE_URL must be set in Railway Variables to point to the OCR service.
+# Example: http://ocr-service.railway.internal:8001
 cmd = "npx prisma db push --accept-data-loss && npm start"

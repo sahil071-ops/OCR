@@ -8,7 +8,8 @@ import { FileUploadZone } from '@/components/session/FileUploadZone';
 import { DocumentReviewGrid } from '@/components/review/DocumentReviewGrid';
 import { useToast } from '@/components/ui/Toaster';
 import { formatDate } from '@/lib/utils';
-import type { Session, Document } from '@/types';
+import type { Session, Document, ProcessingLane } from '@/types';
+import { LANE_LABELS } from '@/types';
 import {
   ArrowLeftIcon,
   DownloadIcon,
@@ -163,6 +164,19 @@ export default function SessionPage({ params }: SessionPageProps) {
   const processingCount = documents.filter(d => d.status === 'PROCESSING').length;
   const readyCount = documents.filter(d => d.status === 'EXTRACTED' || d.status === 'REVIEWED' || d.status === 'ERROR').length;
 
+  // Cost stats – only for documents that have been processed
+  const processedDocs = documents.filter(d => d.processingLane && d.processingLane !== 'UNKNOWN');
+  const aiDocs = processedDocs.filter(d => d.processingLane === 'AI_CHEAP' || d.processingLane === 'AI_STRONG');
+  const freeDocsCount = processedDocs.filter(d => d.processingLane === 'PDF_NATIVE' || d.processingLane === 'OCR_ONLY').length;
+  const totalCost = documents.reduce((sum, d) => sum + (d.aiEstimatedCost ?? 0), 0);
+  const aiPct = processedDocs.length > 0 ? Math.round((aiDocs.length / processedDocs.length) * 100) : 0;
+
+  const laneCounts = documents.reduce<Record<ProcessingLane, number>>((acc, d) => {
+    const lane = (d.processingLane || 'UNKNOWN') as ProcessingLane;
+    acc[lane] = (acc[lane] || 0) + 1;
+    return acc;
+  }, {} as Record<ProcessingLane, number>);
+
   return (
     <div className="pb-24 md:pb-6">
       {/* Header */}
@@ -206,7 +220,7 @@ export default function SessionPage({ params }: SessionPageProps) {
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-3">
         {[
           { label: 'Total', value: documents.length, color: 'text-gray-900' },
           { label: 'Queued', value: pendingCount, color: 'text-amber-600' },
@@ -219,6 +233,54 @@ export default function SessionPage({ params }: SessionPageProps) {
           </div>
         ))}
       </div>
+
+      {/* Cost Savings Panel – only shown once at least one doc is processed */}
+      {processedDocs.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700">Processing Summary</h3>
+            <span className="text-xs text-gray-400">
+              {freeDocsCount}/{processedDocs.length} docs processed without AI
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {(Object.entries(laneCounts) as [ProcessingLane, number][])
+              .filter(([, count]) => count > 0)
+              .sort(([a], [b]) => {
+                const order: ProcessingLane[] = ['PDF_NATIVE', 'OCR_ONLY', 'AI_CHEAP', 'AI_STRONG', 'UNKNOWN'];
+                return order.indexOf(a) - order.indexOf(b);
+              })
+              .map(([lane, count]) => (
+                <div key={lane} className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <span className={`w-2 h-2 rounded-full ${
+                    lane === 'PDF_NATIVE' || lane === 'OCR_ONLY' ? 'bg-green-500' :
+                    lane === 'AI_CHEAP' ? 'bg-yellow-500' :
+                    lane === 'AI_STRONG' ? 'bg-red-500' : 'bg-gray-300'
+                  }`} />
+                  {LANE_LABELS[lane]}: <span className="font-medium text-gray-800">{count}</span>
+                </div>
+              ))
+            }
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-6 text-xs">
+            <div>
+              <span className="text-gray-400">AI used on </span>
+              <span className={`font-semibold ${aiPct > 20 ? 'text-yellow-600' : 'text-green-600'}`}>
+                {aiPct}%
+              </span>
+              <span className="text-gray-400"> of invoices</span>
+            </div>
+            {totalCost > 0 && (
+              <div>
+                <span className="text-gray-400">Est. AI cost: </span>
+                <span className="font-semibold text-gray-700">${totalCost.toFixed(4)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* If no docs processed yet, still show space */}
+      {processedDocs.length === 0 && <div className="mb-6" />}
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">

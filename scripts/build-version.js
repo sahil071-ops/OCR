@@ -27,7 +27,7 @@ const day = String(now.getDate()).padStart(2, '0');
 const hours = String(now.getHours()).padStart(2, '0');
 const mins = String(now.getMinutes()).padStart(2, '0');
 
-const version = `v0.1.0-${year}${month}${day}-${hours}${mins}`;
+const version = `v0.2.0-${year}${month}${day}-${hours}${mins}`;
 const buildTimestamp = now.toISOString();
 
 console.log(`[build-version] Version: ${version}`);

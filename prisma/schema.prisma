@@ -122,6 +122,14 @@ model ExtractedDocument {
   downPayment     Float?
   rounding        Float?
 
+  // ── Processing Lane & Cost Tracking ──
+  processingLane    ProcessingLane  @default(UNKNOWN)
+  fallbackReason    String?         // why this doc was sent to AI fallback
+  ocrConfidence     Float?          // raw confidence from PaddleOCR (0–1)
+  ocrMethod         String?         // pdf-native | paddleocr | paddleocr-pdf | tesseract | claude-vision
+  aiTokensUsed      Int?            // total tokens consumed if AI was called
+  aiEstimatedCost   Float?          // estimated USD cost for AI calls on this doc
+
   // ── Confidence Scores ──
   confidenceData  Json?          // {fieldName: {score, source, method}}
   overallConfidence Float?
@@ -195,4 +203,12 @@ enum DocumentType {
   DEBIT_NOTE
   BILL
   UNKNOWN
+}
+
+enum ProcessingLane {
+  UNKNOWN       // not yet processed
+  PDF_NATIVE    // PDF with native text, no OCR needed – cheapest
+  OCR_ONLY      // image/scanned PDF via PaddleOCR, no AI – cheap
+  AI_CHEAP      // PaddleOCR + haiku rescue – moderate cost
+  AI_STRONG     // PaddleOCR + sonnet escalation – higher cost
 }

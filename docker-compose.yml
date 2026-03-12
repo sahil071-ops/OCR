@@ -1,0 +1,75 @@
+# Local development docker-compose
+# Starts:
+#   - PostgreSQL database
+#   - Python OCR microservice (PaddleOCR)
+#   - Next.js app (run manually with `npm run dev` for hot reload)
+#
+# Usage:
+#   docker-compose up -d postgres ocr-service   # start dependencies only
+#   npm run dev                                  # run Next.js separately
+#
+# Or to run everything:
+#   docker-compose up
+
+version: '3.9'
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: invoice
+      POSTGRES_PASSWORD: invoice
+      POSTGRES_DB: invoice_scanner
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invoice"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── OCR Microservice ───────────────────────────────────────
+  ocr-service:
+    build:
+      context: ./ocr-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: "8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s   # PaddleOCR model download takes time on first start
+
+  # ── Next.js App (optional – prefer `npm run dev` for hot reload) ──
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://invoice:invoice@postgres:5432/invoice_scanner
+      OCR_SERVICE_URL: http://ocr-service:8001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SESSION_TTL_HOURS: "24"
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ocr-service:
+        condition: service_healthy
+    profiles:
+      - full   # Only start with: docker-compose --profile full up
+
+volumes:
+  postgres_data:
