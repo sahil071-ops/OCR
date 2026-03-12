@@ -4,7 +4,7 @@ Exposes a single POST /ocr endpoint that:
   1. Accepts an image or PDF (multipart file OR base64 JSON body)
   2. Converts PDF pages to images if needed
   3. Runs image preprocessing (OpenCV)
-  4. Runs PaddleOCR
+  4. Runs EasyOCR
   5. Returns structured JSON with text + confidence
 
 Designed to be deployed as a separate Railway service.
